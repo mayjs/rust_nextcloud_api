@@ -22,12 +22,12 @@ pub trait OcsCoreApi {
 #[async_trait]
 impl OcsCoreApi for NextcloudApiClient {
     async fn capabilities(&self) -> ApiResult<CapabilityData> {
-        self.api_get("/ocs/v1.php/cloud/capabilities").await
+        self.ocs_get("/ocs/v1.php/cloud/capabilities").await
     }
 
     async fn user_metadata(&self, user_id: &str) -> ApiResult<UserMetadata> {
         let url = format!("/ocs/v1.php/cloud/users/{}", user_id);
-        self.api_get(&url).await
+        self.ocs_get(&url).await
     }
 
     async fn own_metadata(&self) -> ApiResult<UserMetadata> {
@@ -35,7 +35,7 @@ impl OcsCoreApi for NextcloudApiClient {
     }
 
     async fn users(&self) -> ApiResult<UserList> {
-        self.api_get("/ocs/v1.php/cloud/users").await
+        self.ocs_get("/ocs/v1.php/cloud/users").await
     }
 }
 

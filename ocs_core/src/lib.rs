@@ -85,14 +85,25 @@ impl NextcloudApiClient {
     }
 
     /// Send a GET request to the given path, deserializing the response into a given type T
+    ///
+    /// This function has to be used on OCS endpoints, where the entire result is wrapped in a
+    /// `ocs` root.
+    pub async fn ocs_get<T>(&self, path: &str) -> Result<T>
+    where T: DeserializeOwned {
+        Ok(self.api_get::<OcsWrapper<_>>(path)
+            .await?
+            .ocs)
+    }
+
+    /// Send a get request to some path, the return value is convered to `T` without any steps in
+    /// between.
     pub async fn api_get<T>(&self, path: &str) -> Result<T>
-    where T: DeserializeOwned{
+    where T: DeserializeOwned {
         Ok(self.authenticated_request(reqwest::Method::GET, path)
             .send()
             .await?
-            .json::<OcsWrapper<T>>()
+            .json()
             .await?
-            .ocs
             )
     }
 
