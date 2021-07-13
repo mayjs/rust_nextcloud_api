@@ -1,9 +1,11 @@
+pub mod core;
+
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use thiserror::Error;
 use reqwest::{Client, header, IntoUrl, Url};
-use serde_json::Value;
 
+/// Common error type for the Nextcloud API
 #[derive(Error, Debug)]
 pub enum NextcloudApiError {
     #[error("response format invalid")]
@@ -14,11 +16,39 @@ pub enum NextcloudApiError {
     MissingCapabilityError,
 }
 
+/// Meta information that is part of every OCS API response
+#[derive(Deserialize, Debug)]
+pub struct ApiResponseMeta {
+    pub status: String,
+    pub statuscode: u32,
+    pub message: String,
+    pub totalitems: String,
+    pub itemsperpage: String,
+}
+
+/// Overall OCS API response structure
+#[derive(Deserialize, Debug)]
+pub struct ApiResponse<D> {
+    pub meta: ApiResponseMeta,
+    pub data: D
+}
+
+/// Wrapper for the ocs root element in OCS API responses
+#[derive(Deserialize)]
+struct OcsWrapper<T> {
+    ocs: T,
+}
+
+/// Result type with a fixed error type
 pub type Result<T> = std::result::Result<T, NextcloudApiError>;
+/// A result that contains an OCS API response
 pub type ApiResult<T> = Result<ApiResponse<T>>;
 
+/// Credentials for the nextcloud API
 pub struct NextcloudCredentials {
+    /// Username/ID
     user: String,
+    /// Password
     password: String,
 }
 
@@ -28,18 +58,17 @@ impl NextcloudCredentials {
     }
 }
 
+/// The main Nextcloud API client.
+///
+/// Most user-faced functionality is implemented through extension traits.
 pub struct NextcloudApiClient {
     url: Url,
     credentials: NextcloudCredentials,
     api_client: Client,
 }
 
-#[derive(Deserialize)]
-struct OcsWrapper<T> {
-    ocs: T,
-}
-
 impl NextcloudApiClient {
+    /// Construct a new API client for the given URL and credentials
     pub fn new<U>(url: U, credentials: NextcloudCredentials) -> Result<Self>
     where U: IntoUrl {
         let mut headers = header::HeaderMap::new();
@@ -49,11 +78,13 @@ impl NextcloudApiClient {
         Ok(Self { url: url.into_url()?, credentials, api_client })
     }
 
+    /// Prepare an authenticated request to the API using the given method and path
     fn authenticated_request(&self, method: reqwest::Method, path: &str) -> reqwest::RequestBuilder {
         let full_url = self.url.join(path).expect("Invalid API path");
         self.api_client.request(method, full_url).basic_auth(&self.credentials.user, Some(&self.credentials.password))
     }
 
+    /// Send a GET request to the given path, deserializing the response into a given type T
     pub async fn api_get<T>(&self, path: &str) -> Result<T>
     where T: DeserializeOwned{
         Ok(self.authenticated_request(reqwest::Method::GET, path)
@@ -65,48 +96,4 @@ impl NextcloudApiClient {
             )
     }
 
-    pub async fn capabilities(&self) -> ApiResult<CapabilityData> {
-        self.api_get("/ocs/v1.php/cloud/capabilities").await
-    }
-}
-
-#[derive(Deserialize, Debug)]
-pub struct ApiResponseMeta {
-    pub status: String,
-    pub statuscode: u32,
-    pub message: String,
-    pub totalitems: String,
-    pub itemsperpage: String,
-}
-
-#[derive(Deserialize, Debug)]
-pub struct ApiResponse<D> {
-    pub meta: ApiResponseMeta,
-    pub data: D
-}
-
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct VersionData {
-    pub major: u32,
-    pub minor: u32,
-    pub micro: u32,
-    pub string: String,
-    pub edition: String,
-    pub extended_support: bool,
-}
-
-#[derive(Deserialize, Debug)]
-pub struct CapabilityData {
-    pub version: VersionData,
-    pub capabilities: std::collections::HashMap<String, Value>,
-}
-
-impl CapabilityData {
-    pub fn get_capabilities<T>(&self, key: &str) -> Result<T>
-    where T: DeserializeOwned {
-        self.capabilities.get(key)
-            .ok_or(NextcloudApiError::MissingCapabilityError)
-            .and_then(|raw| serde_json::from_value(raw.clone()).map_err(Into::into))
-    }
 }
