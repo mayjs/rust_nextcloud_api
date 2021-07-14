@@ -3,6 +3,12 @@ use async_trait::async_trait;
 use thiserror::Error;
 use serde::Deserialize;
 
+macro_rules! deck_api_path {
+    ($rel_path:literal) => {
+        concat!("index.php/apps/deck/api/v1.0", $rel_path)
+    }
+}
+
 #[derive(Error, Debug, Deserialize)]
 #[error("Code {}: {}", .status, .message)]
 pub struct DeckApiErrorResponse {
@@ -45,6 +51,6 @@ pub trait DeckApi {
 #[async_trait]
 impl DeckApi for NextcloudApiClient {
     async fn boards(&self) -> Result<serde_json::Value> {
-        self.api_get("index.php/apps/deck/api/v1.0/boards").await
+        self.api_get(deck_api_path!("/boards")).await
     }
 }
