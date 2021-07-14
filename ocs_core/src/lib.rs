@@ -90,20 +90,21 @@ impl NextcloudApiClient {
     /// `ocs` root.
     pub async fn ocs_get<T>(&self, path: &str) -> Result<T>
     where T: DeserializeOwned {
-        Ok(self.api_get::<OcsWrapper<_>>(path)
+        Ok(self.api_get::<OcsWrapper<_>,NextcloudApiError>(path)
             .await?
             .ocs)
     }
 
     /// Send a get request to some path, the return value is convered to `T` without any steps in
     /// between.
-    pub async fn api_get<T>(&self, path: &str) -> Result<T>
-    where T: DeserializeOwned {
+    pub async fn api_get<T, E>(&self, path: &str) -> std::result::Result<T, E>
+    where T: DeserializeOwned,
+          E: From<NextcloudApiError> {
         Ok(self.authenticated_request(reqwest::Method::GET, path)
             .send()
-            .await?
+            .await.map_err(|e| NextcloudApiError::from(e))?
             .json()
-            .await?
+            .await.map_err(|e| NextcloudApiError::from(e))?
             )
     }
 
