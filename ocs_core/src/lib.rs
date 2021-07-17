@@ -1,9 +1,9 @@
 pub mod core;
 
 use serde::de::DeserializeOwned;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use reqwest::{Client, header, IntoUrl, Url};
+use reqwest::{Client, header, IntoUrl, Url, Body};
 
 /// Common error type for the Nextcloud API
 #[derive(Error, Debug)]
@@ -84,6 +84,29 @@ impl NextcloudApiClient {
         self.api_client.request(method, full_url).basic_auth(&self.credentials.user, Some(&self.credentials.password))
     }
 
+    async fn raw_request<T, E, B>(&self, method: reqwest::Method, path: &str, headers: Option<header::HeaderMap>, query: Option<&[(&str, &str)]>, body: Option<B>) -> std::result::Result<T, E>
+    where T: DeserializeOwned,
+          E: From<NextcloudApiError>,
+          B: Into<Body> {
+        let mut req = self.authenticated_request(method, path);
+        if headers.is_some() {
+            req = req.headers(headers.unwrap());
+        }
+        if query.is_some() {
+            req = req.query(query.unwrap());
+        }
+        if body.is_some() {
+            req = req.body(body.unwrap());
+        }
+        Ok(req
+            .send()
+            .await.map_err(|e| NextcloudApiError::from(e))?
+            .json()
+            .await.map_err(|e| NextcloudApiError::from(e))?
+            )
+
+    }
+
     /// Send a GET request to the given path, deserializing the response into a given type T
     ///
     /// This function has to be used on OCS endpoints, where the entire result is wrapped in a
@@ -100,12 +123,26 @@ impl NextcloudApiClient {
     pub async fn api_get<T, E>(&self, path: &str) -> std::result::Result<T, E>
     where T: DeserializeOwned,
           E: From<NextcloudApiError> {
-        Ok(self.authenticated_request(reqwest::Method::GET, path)
-            .send()
-            .await.map_err(|e| NextcloudApiError::from(e))?
-            .json()
-            .await.map_err(|e| NextcloudApiError::from(e))?
-            )
+    	self.api_get_ext(path, None, None).await
     }
 
+    pub async fn api_get_ext<T, E>(&self, path: &str, headers: Option<header::HeaderMap>, query: Option<&[(&str, &str)]>) -> std::result::Result<T, E>
+    where T: DeserializeOwned,
+          E: From<NextcloudApiError>, {
+	self.raw_request::<_,_,String>(reqwest::Method::GET, path, headers, query, None).await
+    }
+
+    pub async fn api_post_raw<T, E, B>(&self, path: &str, headers: Option<header::HeaderMap>, query: Option<&[(&str, &str)]>, body: B) -> std::result::Result<T, E>
+    where T: DeserializeOwned,
+          E: From<NextcloudApiError>,
+          B: Into<Body> {
+	self.raw_request(reqwest::Method::POST, path, headers, query, Some(body)).await
+    }
+
+    pub async fn api_post<T, E, B>(&self, path: &str, headers: Option<header::HeaderMap>, query: Option<&[(&str, &str)]>, body: &B) -> std::result::Result<T, E>
+    where T: DeserializeOwned,
+          E: From<NextcloudApiError>,
+          B: Serialize {
+	self.raw_request(reqwest::Method::POST, path, headers, query, Some(serde_json::to_string(body).map_err(NextcloudApiError::from)?)).await
+    }
 }

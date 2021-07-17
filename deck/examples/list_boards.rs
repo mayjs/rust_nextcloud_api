@@ -10,6 +10,6 @@ async fn main() {
     let creds = NextcloudCredentials::new(env::var("NC_USER").expect("User not set"), env::var("NC_PASS").expect("Pass not set"));
     let client = NextcloudApiClient::new(env::var("NC_URL").expect("URL not set"), creds).unwrap();
 
-    let res = client.boards().await.unwrap();
+    let res = client.boards(true).await.unwrap();
     println!("Boards: {:?}", res);
 }

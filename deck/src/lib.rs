@@ -2,6 +2,7 @@ use nextcloud_ocs_core::NextcloudApiClient;
 use async_trait::async_trait;
 use thiserror::Error;
 use serde::Deserialize;
+use serde_json::Value;
 
 macro_rules! deck_api_path {
     ($rel_path:literal) => {
@@ -45,12 +46,51 @@ impl<T> From<DeckApiResult<T>> for Result<T> {
 
 #[async_trait]
 pub trait DeckApi {
-    async fn boards(&self) -> Result<serde_json::Value>;
+    async fn boards(&self, details: bool) -> Result<Vec<Board>>;
 }
 
 #[async_trait]
 impl DeckApi for NextcloudApiClient {
-    async fn boards(&self) -> Result<serde_json::Value> {
-        self.api_get(deck_api_path!("/boards")).await
+    async fn boards(&self, details: bool) -> Result<Vec<Board>> {
+        const DETAILS_HEADERS: &[(&str, &str)] = &[("details","true")];
+        let headers = match details {
+            true => Some(DETAILS_HEADERS),
+            false => None
+        };
+        self.api_get_ext(deck_api_path!("/boards"), None, headers).await
     }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Label {
+    pub id: i64,
+    pub title: String,
+    pub color: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub struct Permissions {
+    pub permission_edit: bool,
+    pub permission_manage: bool,
+    pub permission_read: bool,
+    pub permission_share: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Board {
+    pub title: String,
+    pub owner: Value,
+    pub color: String,
+    pub archived: bool,
+    pub labels: Vec<Label>,
+    pub acl: Vec<Value>,
+    pub permissions: Permissions,
+    pub users: Vec<Value>,
+    pub shared: usize,
+    pub deleted_at: usize,
+    pub id: u64,
+    pub last_modified: u64,
+    pub settings: Value,
 }
